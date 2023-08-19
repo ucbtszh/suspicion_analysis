@@ -28,6 +28,9 @@ for (i in 1:length(uuids)){
   print("========================================================================")
 }
 
+# write.csv(cv_bay_model_ci, "rs_crossval_result.csv")
+write.csv(cv_bay_model_ci, "fr_crossval_result.csv")
+
 cv_bay_model_ci[cv_bay_model_ci$upper <= 0, ]
 
 ggplot(cv_bay_model_ci, aes(param, mean)) + 
@@ -69,7 +72,7 @@ for (uuid in uuids){
   zfar <- qnorm(fa_rate)
   beta <- exp(-zhr * zhr / 2 + zfar * zfar / 2)
   
-  n_lied_self <- sum(tmp$col_reported != tmp$col_picked)
+  n_lied_self <- sum(tmp$subject_lied)
 
   sdt <- data.frame(uuid=uuid, dprime=dprime, beta=beta, hitrate=hit_rate, farate=fa_rate,
                     n_lied_self=n_lied_self)
@@ -81,18 +84,76 @@ setkey(df_sdt, 'uuid')
 
 data_long <- merge(data_long, df_sdt, by.x = 'PID', by.y = 'uuid')
 
-master <- merge(data_long, rs_std_coefs, by.x = 'PID', by.y = 'uuid')
-master$mean_suspicion_rating <- 6-master$mean_honesty_rating
+master <- merge(data_long, fr_std_coefs, by.x = 'PID', by.y = 'uuid')
+# master <- merge(data_long, rs_std_coefs, by.x = 'PID', by.y = 'uuid')
+# master$mean_suspicion_rating <- 6-master$mean_honesty_rating
 
 master[is.na(master)] <- NA
 master[master==-Inf] <- NA
 master[master==Inf] <- NA
 master$`(Intercept)` <- NULL
+master$X <- NULL
+
+master$lied_min_sev <- master$subject_liedTRUE - master$normed_signed_e_v
+master$lied_min_usev <- master$subject_liedTRUE - master$normed_unsigned_e_v
+
+write.csv(master, file="fr_master_meta.csv")
+# write.csv(master, file="rs_master_meta.csv")
+
+
 
 ##### AGGREGATE LEVEL REGRESSIONS #####
-dim(master)
-head(master)
 
+#### STUDY 1 ####
+summary(lm('normed_signed_e_v ~ crt + eq + aq + rgpts + 
+           age + gender + ed_lev +
+           lie_prop', data = master))
+summary(lm('normed_unsigned_e_v ~ crt + eq + aq + rgpts + 
+           age + gender + ed_lev +
+           lie_prop', data = master))
+summary(lm('subject_liedTRUE ~ crt + eq + aq + rgpts + 
+           age + gender + ed_lev +
+           lie_prop', data = master))
+summary(lm('subject_lostTRUE ~ crt + eq + aq + rgpts + 
+           age + gender + ed_lev +
+           lie_prop', data = master))
+summary(lm('outcome_blueTRUE ~ crt + eq + aq + rgpts + 
+           age + gender + ed_lev +
+           lie_prop', data = master))
+
+# CONTRAST PARAMS: WEIGHT OBJECTIVE STAT COEFS VS. INTROSPECTION (SUBJECT LIED)
+summary(lm('lied_min_sev ~ crt + eq + aq + rgpts + 
+           age + gender + ed_lev +
+           lie_prop', data = master))
+summary(lm('lied_min_usev ~ crt + eq + aq + rgpts + 
+           age + gender + ed_lev +
+           lie_prop', data = master))
+
+# SIG & CONSISTENT EFFECTS:
+summary(lm('mean_suspicion_rating ~ crt + eq + aq + rgpts + 
+           age + gender + ed_lev +
+           lie_prop', data = master))
+lm.beta(lm('mean_suspicion_rating ~ crt + eq + aq + rgpts + 
+           age + gender + ed_lev +
+           lie_prop', data = master))
+
+fr_lm_dprime <- summary(lm('dprime ~ outcome_blueTRUE + subject_liedTRUE + 
+            subject_lostTRUE + normed_signed_e_v + normed_unsigned_e_v +
+            crt + eq + aq + rgpts + 
+           age + gender + ed_lev +
+           lie_prop', data = master))
+fr_lm_dprime_std <- lm.beta(lm('dprime ~ outcome_blueTRUE + subject_liedTRUE + subject_lostTRUE + normed_signed_e_v + normed_unsigned_e_v +
+            crt + eq + aq + rgpts + 
+           age + gender + ed_lev +
+           lie_prop', data = master))
+
+fr_lm_sdt_beta <- summary(lm('beta ~ outcome_blueTRUE + subject_liedTRUE + subject_lostTRUE + normed_signed_e_v + normed_unsigned_e_v +
+            crt + 
+           age + gender + ed_lev +
+           lie_prop', data = master))
+
+
+#### STUDY 2 ####
 summary(lm('normed_signed_e_v ~ crt + 
            age + gender + ed_lev +
            lie_prop', data = master))
@@ -110,10 +171,6 @@ summary(lm('outcome_blueTRUE ~ crt +
            lie_prop', data = master))
 
 # CONTRAST PARAMS: WEIGHT OBJECTIVE STAT COEFS VS. INTROSPECTION (SUBJECT LIED)
-master$lied_min_sev <- master$subject_liedTRUE - master$normed_signed_e_v
-master$lied_min_usev <- master$subject_liedTRUE - master$normed_unsigned_e_v
-colnames(master)
-
 summary(lm('lied_min_sev ~ crt +
            age + gender + ed_lev +
            lie_prop', data = master))
@@ -146,8 +203,6 @@ rs_lm_dprime_std <- lm.beta(lm('beta ~ outcome_blueTRUE + subject_liedTRUE + sub
             crt + 
            age + gender + ed_lev +
            lie_prop', data = master))
-
-# write.csv(master, file="rs_master_meta.csv")
 
 
 # RERUN MODEL AFTER EXCLUDING PARTICIPANTS WHO THOUGHT <3 OTHER PARTICIPANTS
